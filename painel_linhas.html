@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Six Sigma Executivo</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    
+    <style>
+        /* Paleta de Cores Premium (Slate Dark Theme) */
+        :root {
+            --bg-main: #0f172a;       /* Slate 900 */
+            --bg-card: #1e293b;       /* Slate 800 */
+            --border: #334155;        /* Slate 700 */
+            --text-main: #f8fafc;     /* Slate 50 */
+            --text-muted: #94a3b8;    /* Slate 400 */
+            --accent-blue: #38bdf8;   /* Sky 400 (Pontos OK) */
+            --accent-red: #ef4444;    /* Red 500 (Refugo) */
+            --accent-orange: #f59e0b; /* Amber 500 (Limites) */
+            --btn-bg: #334155;
+            --btn-hover: #475569;
+        }
+
+        * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            margin: 0; padding: 25px;
+        }
+        
+        /* Cabeçalho */
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { margin: 0; color: var(--accent-blue); font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+        .header p { margin: 8px 0 0 0; color: var(--text-muted); font-size: 15px; }
+        
+        /* Controles Interativos */
+        .controls {
+            display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-bottom: 25px; 
+            padding-bottom: 25px; border-bottom: 1px solid var(--border);
+        }
+        .btn {
+            background-color: var(--btn-bg); border: 1px solid var(--border); color: var(--text-main);
+            padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+            transition: all 0.2s ease; display: flex; align-items: center; gap: 8px;
+        }
+        .btn:hover { background-color: var(--btn-hover); transform: translateY(-1px); }
+        .btn.active { background-color: var(--accent-blue); color: #000; border-color: var(--accent-blue); }
+        .btn.btn-danger.active { background-color: var(--accent-red); color: #fff; border-color: var(--accent-red); }
+
+        /* Grade do Dashboard */
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        .full-width { grid-column: span 2; }
+        
+        /* Cards de Gráfico */
+        .chart-card {
+            background-color: var(--bg-card); border-radius: 12px; padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 1px solid var(--border);
+            display: flex; flex-direction: column;
+        }
+        .chart-wrapper { position: relative; height: 350px; width: 100%; margin-top: 10px; }
+        .chart-card.large .chart-wrapper { height: 420px; }
+        
+        /* Storytelling UI (Acordeão) */
+        .story-header {
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border);
+        }
+        .btn-story {
+            background: transparent; border: 1px solid var(--accent-orange); color: var(--accent-orange);
+            padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;
+            transition: 0.3s;
+        }
+        .btn-story:hover { background: rgba(245, 158, 11, 0.1); }
+        
+        .story-content {
+            display: none; margin-top: 15px; padding: 15px;
+            background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--accent-red);
+            border-radius: 4px; font-size: 13px; line-height: 1.5; color: #fecaca;
+            animation: slideDown 0.3s ease-out forwards;
+        }
+        .story-content h4 { margin: 0 0 5px 0; color: var(--accent-red); font-size: 15px; }
+
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Análise de Capabilidade Dimensional</h1>
+        <p>Dashboard Interativo Six Sigma com Diagnóstico de Engenharia</p>
+    </div>
+
+    <div class="controls">
+        <button id="btnCat" class="btn active" onclick="setAxis('cat')">📊 Eixo: Sequência de Peças</button>
+        <button id="btnCont" class="btn" onclick="setAxis('cont')">📏 Eixo: Nominal da Peça</button>
+        <button id="btnLabels" class="btn" onclick="toggleLabels()">🏷️ Mostrar Valores</button>
+        <button id="btnAnomalies" class="btn btn-danger" onclick="highlightAnomalies()">🚨 Destacar Apenas Refugos</button>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="chart-card">
+            <div class="chart-wrapper"><canvas id="chartXWeb"></canvas></div>
+            <div class="story-header">
+                <span style="color: var(--text-muted); font-size: 13px;">Status: <b style="color: var(--accent-blue);">Estável (Desvio)</b></span>
+                <button class="btn-story" onclick="toggleStory('story1')">Ver Diagnóstico Estatístico</button>
+            </div>
+            <div id="story1" class="story-content">
+                <h4>Diagnóstico: Média Descentralizada</h4>
+                O processo apresenta uma variação controlada, porém a curva opera sistematicamente deslocada para baixo em relação ao alvo (zero). Apesar de não gerar refugos imediatos, isso reduz o Cpk e deixa o processo vulnerável a pequenas flutuações. <br><br><b>Ação recomendada:</b> Ajuste fino de offset centralizando a média.
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-wrapper"><canvas id="chartYWeb"></canvas></div>
+            <div class="story-header">
+                <span style="color: var(--text-muted); font-size: 13px;">Status: <b style="color: var(--accent-red);">Causa Especial Detectada</b></span>
+                <button class="btn-story" onclick="toggleStory('story2')">Ver Diagnóstico Estatístico</button>
+            </div>
+            <div id="story2" class="story-content">
+                <h4>Diagnóstico: Salto Inesperado (Causa Especial)</h4>
+                O eixo Y vinha trabalhando em tendência negativa, mas sofre um <b>salto súbito e violento</b> nas amostras finais, rompendo o Limite Superior de Tolerância (LST). Este comportamento em "dente de serra" não é variação natural da máquina.<br><br><b>Ação recomendada:</b> Investigar mudança de lote de matéria-prima, troca de ferramenta ou parada de máquina exatamente antes desse salto.
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-wrapper"><canvas id="chartPFFZ"></canvas></div>
+            <div class="story-header">
+                <span style="color: var(--text-muted); font-size: 13px;">Status: <b style="color: var(--accent-orange);">Marginal / Risco</b></span>
+                <button class="btn-story" onclick="toggleStory('story3')">Ver Diagnóstico Estatístico</button>
+            </div>
+            <div id="story3" class="story-content">
+                <h4>Diagnóstico: Zumbido no Limite Inferior</h4>
+                Ao usinar a face PFF, a máquina concentra a maioria das dimensões muito próximas do Limite Inferior de Tolerância (LIT = -0.80). O processo está "raspando" na zona de refugo. A distribuição estatística está cortada.<br><br><b>Ação recomendada:</b> Rever o plano de fixação e a pressão de aperto (clamping) desta face específica.
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-wrapper"><canvas id="chartPFBZ"></canvas></div>
+            <div class="story-header">
+                <span style="color: var(--text-muted); font-size: 13px;">Status: <b style="color: var(--accent-red);">Erro Crítico de Setup</b></span>
+                <button class="btn-story" onclick="toggleStory('story4')">Ver Diagnóstico Estatístico</button>
+            </div>
+            <div id="story4" class="story-content">
+                <h4>Diagnóstico: Shift Positivo Absoluto</h4>
+                Diferente da face PFF, ao passar para a face PFB o processo sofre um <i>Shift</i> (Deslocamento) severo. A média salta absurdamente para +1.32mm, ignorando completamente o Limite Superior (+0.80). <br><br><b>Ação recomendada:</b> Isso prova um erro humano/programação de referenciamento de Setup (Zero Peça) entre as duas características. Ajuste obrigatório do CNC.
+            </div>
+        </div>
+
+        <div class="chart-card large full-width">
+            <div class="chart-wrapper"><canvas id="chartPFFPFBX"></canvas></div>
+            <div class="story-header">
+                <span style="color: var(--text-muted); font-size: 13px;">Status: <b style="color: var(--accent-red);">Deriva Estrutural (Drift)</b></span>
+                <button class="btn-story" onclick="toggleStory('story5')">Ver Diagnóstico Estatístico</button>
+            </div>
+            <div id="story5" class="story-content">
+                <h4>Diagnóstico: Deriva Sistêmica em Peças Longas</h4>
+                O Eixo X expõe a maior falha da linha. A usinagem inicia perfeita e perfeitamente controlada. Contudo, à medida que a ferramenta percorre o barramento (peças de 6 metros), a cota <b>cai continuamente</b> formando uma curva de deriva (Drift), chegando a terríveis -1.89mm nas extremidades.<br><br><b>Ação recomendada:</b> O equipamento não consegue manter estabilidade em comprimentos longos. Avaliar urgentemente deflexão do barramento da máquina, soltura do fixador ou dilatação térmica severa (Necessita compensação a laser).
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.register(ChartDataLabels);
+        Chart.register(window['chartjs-plugin-annotation']);
+
+        let showLabels = false;
+        let onlyAnomalies = false;
+
+        // Dados
+        const dataXWeb = [0.48, 0.41, 0.44, 0.46, 0.41, 0.41, 0.38, 0.33, 0.38, 0.33, 0.28, 0.33, 0.44, 0.40, 0.46, 0.37, 0.31, 0.40, 0.30, 0.27, 0.34, 0.34, 0.29, 0.34, 0.41, 0.34, 0.36, 0.32, 0.29, 0.34, 0.70, 0.69, 0.54, 0.68, 0.65, 0.51, 0.32, 0.25, 0.28, 0.23, 0.17, 0.21, 0.36, 0.31, 0.36, 0.28, 0.26, 0.32, 0.36, 0.33, 0.39, 0.34, 0.29, 0.33, 0.23, 0.20, 0.25, 0.25, 0.21, 0.22, 0.34, 0.27, 0.29, 0.29, 0.22, 0.25, 0.43, 0.39, 0.32, 0.40, 0.37, 0.31, 0.10, 0.06, 0.03, -0.04, -0.06, -0.01, -0.02, -0.04, -0.02, 0.02, -0.02, -0.04, 0.13, 0.11, 0.12, 0.01, -0.01, -0.01, -0.06, -0.08, -0.06, -0.04, -0.11, -0.14, 0.07, -0.02, -0.02, 0.01, -0.06, -0.06, 0.07, 0.00, -0.04, 0.00, -0.06, -0.07, -0.08, -0.15, -0.16, -0.14, -0.20, -0.22, -0.24, -0.26, -0.31, -0.29, -0.14, -0.19, -0.17, -0.15, -0.24, -0.23, -0.25, -0.32, -0.29, -0.31, -0.35, -0.39, -0.25, -0.30, -0.25, -0.30, -0.28, -0.36, -0.33, -0.21, -0.29, -0.23, -0.35, -0.41, -0.25, -0.27];
+        const dataYWeb = [0.04, -0.01, -0.18, -0.32, -0.24, -0.17, -0.38, -0.39, -0.47, -0.49, -0.60, -0.63, -0.47, -0.40, -0.57, -0.50, -0.64, -0.69, -0.48, -0.44, -0.60, -0.54, -0.59, -0.58, -0.48, -0.57, -0.63, -0.45, -0.57, -0.52, -0.56, -0.51, -0.25, -0.56, -0.62, -0.62, -0.51, -0.64, -0.56, -0.45, -0.64, -0.71, -0.82, -0.92, -0.91, -0.81, -0.83, -0.88, -0.92, -1.03, -1.04, -0.98, -0.98, -1.07, -0.91, -0.91, -0.98, -0.89, -0.93, -0.90, -0.91, -0.97, -0.94, -0.93, -0.91, -0.92, -0.74, -0.85, -0.81, -0.92, -1.01, -0.81, -0.90, -0.96, -0.78, -1.03, -1.18, -1.03, -1.18, -1.07, -1.11, -1.07, -1.17, -1.16, -1.02, -1.05, -1.03, -1.07, -1.09, -1.00, -0.79, -0.95, -0.82, -0.67, -0.72, -0.77, -0.63, -0.77, -0.69, -0.50, -0.52, -0.60, -0.60, -0.63, -0.68, -0.65, -0.68, -0.59, -0.42, -0.49, -0.55, -0.48, -0.62, -0.53, -0.79, -0.67, -0.73, -0.55, -0.67, -0.59, -0.65, -0.66, -0.63, -0.53, -0.62, -0.69, -0.40, -0.46, -0.54, -0.16, -0.31, -0.17, -0.20, -0.20, -0.19, -0.01, -0.13, -0.14, -0.04, 0.03, -0.02, 0.12, 0.12, -0.06, -0.02, 0.03, 0.08, 0.08, -0.03, 0.03, 0.12, 0.10, 0.19, 0.20, 0.07, 0.11, 0.03, 0.20, 0.32, 0.24, 0.67, 0.65, 0.61, 0.54, 0.54, 0.43, 0.59, 0.61, 0.54, 0.39, 0.46, 0.55, 0.19, 0.20, 0.27];
+        const dataPFFZ = [-0.95, -0.82, -0.45, -0.45, -0.60, -0.38, -0.44, -0.31, -0.29, -0.20, -0.69, -0.40, -0.34, -0.25, 0.12, 0.02, -0.05, 0.26, 0.22, 0.36, 0.08, 0.11, 0.14, 0.27, 0.24, 0.44, 0.28, 0.22, 0.47, 0.26, 0.06, 0.06, 0.16, 0.23, 0.12, 0.08, -0.12, 0.07, 0.14, 0.02, -0.12, -0.25, -0.25, -0.36, -0.18, -0.34, -0.59, -0.31, -0.58, -0.61, -1.01, -0.92, -1.01, -1.03, -1.00, -0.93, -1.00, -1.01, -0.72, -0.95, -1.30, -1.01, -1.01, -0.93, -0.65, -0.45];
+        const dataPFBZ = [0.01, -0.11, 0.18, 0.17, 0.36, 0.54, 0.56, 0.64, 0.88, 0.70, 0.52, 0.55, 0.43, 0.68, 0.81, 0.98, 1.11, 1.23, 1.31, 0.96, 0.91, 0.97, 1.08, 0.91, 0.78, 1.19, 1.23, 1.33, 1.27, 0.97, 0.82, 0.83, 0.89, 0.83, 0.55, 0.73, 0.72, 0.85, 0.96, 0.56, 0.57, 0.64, 0.60, 0.43, 0.31, 0.43, 0.26, 0.41, 0.42, -0.03, -0.06, 0.09, 0.02, -0.09, -0.47, -0.34, -0.40, -0.15, -0.24, -0.51, -0.69, -0.96, -0.84, -0.69, -0.71, -0.68];
+        const dataXLong = [-0.56, -0.58, -0.69, -0.66, -0.70, -0.69, -0.78, -0.66, -0.73, -0.73, -0.76, -0.81, -0.77, -0.75, -0.85, -0.86, -0.84, -0.71, -0.79, -0.76, -0.88, -0.86, -0.81, -0.75, -0.78, -0.81, -0.93, -0.84, -0.94, -0.97, -1.00, -1.05, -1.05, -1.03, -1.13, -1.13, -1.19, -1.12, -1.21, -1.25, -1.29, -1.31, -1.29, -1.32, -1.42, -1.44, -1.54, -1.40, -1.47, -1.54, -1.54, -1.54, -1.56, -1.59, -1.52, -1.59, -1.60, -1.65, -1.72, -1.77, -1.71, -1.75, -1.81, -1.74, -1.77, -1.73, -1.89];
+
+        const labelsCat = {
+            XWeb: dataXWeb.map((_, i) => i + 1), YWeb: dataYWeb.map((_, i) => i + 1),
+            PFFZ: dataPFFZ.map((_, i) => i + 1), PFBZ: dataPFBZ.map((_, i) => i + 1), XLong: dataXLong.map((_, i) => i + 1)
+        };
+        const labelsCont = {
+            XWeb: dataXWeb.map((_, i) => (Math.floor(i/3)*100 + 100)), YWeb: dataYWeb.map((_, i) => [70, 135, 200][i%3]),
+            PFFZ: dataPFFZ.map(() => 45), PFBZ: dataPFBZ.map(() => 45), XLong: dataXLong.map((_, i) => (Math.floor(i/2)*100 + 100))
+        };
+
+        const charts = {};
+
+        function initChart(ctxId, title, dataArray, lsl, usl, yMin, yMax, chartKey) {
+            const ctx = document.getElementById(ctxId).getContext('2d');
+            
+            // Função avançada para formatar o Tooltip (Hover)
+            const tooltipCallback = {
+                label: function(context) {
+                    let val = context.raw;
+                    let status = (val > usl || val < lsl) ? "🔴 REFUGO" : "🟢 DENTRO DO TOL.";
+                    return [`Desvio: ${val.toFixed(3)} mm`, `Status: ${status}`];
+                }
+            };
+
+            charts[chartKey] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsCat[chartKey],
+                    datasets: [{
+                        label: 'Desvio', data: dataArray,
+                        borderColor: '#475569', borderWidth: 2,
+                        // Configuração dinámica de cor e raio baseada nas variaveis globais
+                        pointBackgroundColor: (ctx) => {
+                            let val = ctx.raw; return (val < lsl || val > usl) ? '#ef4444' : '#38bdf8';
+                        },
+                        pointBorderColor: (ctx) => {
+                            let val = ctx.raw; return (val < lsl || val > usl) ? '#ef4444' : '#38bdf8';
+                        },
+                        pointRadius: (ctx) => {
+                            let val = ctx.raw; 
+                            if(onlyAnomalies) return (val < lsl || val > usl) ? 6 : 0; // Esconde os bons
+                            return (val < lsl || val > usl) ? 5 : 3;
+                        },
+                        fill: false, tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: title, color: '#f8fafc', font: { size: 16, family: 'Segoe UI' }, padding: {bottom: 10} },
+                        tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleColor: '#38bdf8', bodyFont: {size: 13}, callbacks: tooltipCallback },
+                        datalabels: {
+                            display: false, color: '#e2e8f0', align: 'end', anchor: 'end',
+                            offset: 4, rotation: -45, font: { size: 10, weight: 'bold' },
+                            formatter: (value) => value.toFixed(2)
+                        },
+                        annotation: {
+                            annotations: {
+                                uslLine: { type: 'line', yMin: usl, yMax: usl, borderColor: '#f59e0b', borderWidth: 2, borderDash: [4, 4], label: { display: true, content: `LST (+${usl})`, position: 'end', backgroundColor: 'rgba(245, 158, 11, 0.9)', color: '#000', font: {size: 10, weight: 'bold'} } },
+                                lslLine: { type: 'line', yMin: lsl, yMax: lsl, borderColor: '#f59e0b', borderWidth: 2, borderDash: [4, 4], label: { display: true, content: `LIT (${lsl})`, position: 'end', backgroundColor: 'rgba(245, 158, 11, 0.9)', color: '#000', font: {size: 10, weight: 'bold'} } },
+                                zeroLine: { type: 'line', yMin: 0, yMax: 0, borderColor: '#10b981', borderWidth: 1.5 }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                        y: { min: yMin, max: yMax, ticks: { color: '#94a3b8' }, grid: { color: '#334155', borderDash: [3, 3] } }
+                    }
+                }
+            });
+        }
+
+        // --- FUNÇÕES DE INTERATIVIDADE E STORYTELLING ---
+        
+        function setAxis(type) {
+            document.getElementById('btnCat').classList.remove('active');
+            document.getElementById('btnCont').classList.remove('active');
+            
+            if(type === 'cat') {
+                document.getElementById('btnCat').classList.add('active');
+                for (let key in charts) { charts[key].data.labels = labelsCat[key]; charts[key].update(); }
+            } else {
+                document.getElementById('btnCont').classList.add('active');
+                for (let key in charts) { charts[key].data.labels = labelsCont[key]; charts[key].update(); }
+            }
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            const btn = document.getElementById('btnLabels');
+            btn.classList.toggle('active');
+            btn.innerText = showLabels ? "👁️ Ocultar Valores" : "🏷️ Mostrar Valores";
+            
+            for (let key in charts) { 
+                charts[key].options.plugins.datalabels.display = showLabels; 
+                charts[key].update(); 
+            }
+        }
+
+        function highlightAnomalies() {
+            onlyAnomalies = !onlyAnomalies;
+            const btn = document.getElementById('btnAnomalies');
+            btn.classList.toggle('active');
+            btn.innerText = onlyAnomalies ? "🔍 Ver Curva Completa" : "🚨 Destacar Apenas Refugos";
+            
+            for (let key in charts) { charts[key].update(); } // O Chart.js vai recalcular a cor/tamanho de cada ponto
+        }
+
+        function toggleStory(storyId) {
+            const el = document.getElementById(storyId);
+            el.style.display = (el.style.display === "block") ? "none" : "block";
+        }
+
+        window.onload = function() {
+            initChart('chartXWeb', 'Eixo X (Web Holes)', dataXWeb, -0.7, 0.7, -0.8, 1.2, 'XWeb');
+            initChart('chartYWeb', 'Eixo Y (Web Holes)', dataYWeb, -0.5, 0.5, -1.5, 1.0, 'YWeb');
+            initChart('chartPFFZ', 'Face PFF Z', dataPFFZ, -0.8, 0.8, -1.6, 1.0, 'PFFZ');
+            initChart('chartPFBZ', 'Face PFB Z', dataPFBZ, -0.8, 0.8, -1.2, 1.8, 'PFBZ');
+            initChart('chartPFFPFBX', 'Peças Longas Eixo X (Drift)', dataXLong, -0.7, 0.7, -2.5, 0.8, 'XLong');
+        };
+    </script>
+</body>
+</html>
